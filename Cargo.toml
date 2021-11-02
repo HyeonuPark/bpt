@@ -1,0 +1,21 @@
+[package]
+name = "bpt"
+version = "0.1.0"
+authors = ["Hyeonu Park <nemo1275@gmail.com>"]
+edition = "2021"
+
+[dependencies]
+arrayvec = "0.7"
+
+[dev-dependencies]
+criterion = "0.3"
+jemallocator = "0.3"
+rand = "0.8"
+
+[[bench]]
+harness = false
+name = "benchmark"
+
+[features]
+unchecked = []
+std-compat = ["unchecked"]
