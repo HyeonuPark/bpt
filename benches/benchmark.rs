@@ -1,172 +1,84 @@
 use criterion::{black_box, criterion_group, criterion_main, Criterion};
 
+#[rustfmt::skip]
+mod input;
+
 #[global_allocator]
 static ALLOC: jemallocator::Jemalloc = jemallocator::Jemalloc;
 
+fn benchmark_input(criterion: &mut Criterion, input_name: &str, input: &[u32]) {
+    macro_rules! each_maps {
+        ($($mapvar:ident, $name:expr, $init:expr),*) => {
+            {
+                let mut bench = criterion.benchmark_group(&format!("insert-{}", input_name));
+                $(
+                    bench.bench_function($name, |bench| {
+                        bench.iter(|| {
+                            let mut map = $init;
+                            for &n in input {
+                                let n = black_box(n);
+                                black_box(map.insert(n, n));
+                            }
+                        })
+                    });
+                )*
+            }
+            {
+                let mut bench = criterion.benchmark_group(&format!("insert-delete-{}", input_name));
+                $(
+                    bench.bench_function($name, |bench| {
+                        bench.iter(|| {
+                            let mut map = $init;
+                            for &n in input {
+                                let n = black_box(n);
+                                black_box(map.insert(n, n));
+                            }
+                        })
+                    });
+                )*
+            }
+            {
+                $(
+                    let mut $mapvar = $init;
+                )*
+                for &n in input {
+                    $(
+                        $mapvar.insert(n, n);
+                    )*
+                }
+                let mut bench = criterion.benchmark_group(&format!("get-{}", input_name));
+                $(
+                    bench.bench_function($name, |bench| {
+                        bench.iter(|| {
+                            for &n in input {
+                                black_box($mapvar.get(&black_box(n)));
+                                black_box($mapvar.get(&black_box(n).wrapping_add(1)));
+                            }
+                        })
+                    });
+                )*
+            }
+        }
+    }
+    macro_rules! each_caps {
+        ($($CAP:literal)*) => {
+            paste::paste! {
+                each_maps!(
+                    stdmap, "std", std::collections::BTreeMap::new()
+                    $(
+                        , [<bpt_ $CAP>], &format!("bpt_{}", $CAP), bpt::BTreeMap::<u32, u32, $CAP>::new()
+                    )*
+                );
+            }
+        }
+    }
+
+    each_caps!(15 17 19 21 23 25 27 29 31);
+}
+
 fn criterion_benchmark(criterion: &mut Criterion) {
-    let inputs: Vec<i32> = std::iter::repeat_with(rand::random).take(100).collect();
-
-    let mut bench = criterion.benchmark_group("insert-small");
-    bench.bench_function("std", |bench| {
-        bench.iter(|| {
-            let mut map = std::collections::BTreeMap::new();
-            for &n in &inputs {
-                let n = black_box(n);
-                black_box(map.insert(n, n));
-            }
-        })
-    });
-    bench.bench_function("custom", |bench| {
-        bench.iter(|| {
-            let mut map = bpt::BTreeMap::new();
-            for &n in &inputs {
-                let n = black_box(n);
-                black_box(map.insert(n, n));
-            }
-        })
-    });
-    drop(bench);
-
-    let mut bench = criterion.benchmark_group("insert-delete-small");
-    bench.bench_function("std", |bench| {
-        bench.iter(|| {
-            let mut map = std::collections::BTreeMap::new();
-            for &n in &inputs {
-                let n = black_box(n);
-                black_box(map.insert(n, n));
-            }
-            for &n in &inputs {
-                black_box(map.remove(&n));
-            }
-            assert!(map.is_empty());
-        })
-    });
-    bench.bench_function("custom", |bench| {
-        bench.iter(|| {
-            let mut map = bpt::BTreeMap::new();
-            for &n in &inputs {
-                let n = black_box(n);
-                black_box(map.insert(n, n));
-            }
-            for &n in &inputs {
-                black_box(map.remove(&n));
-            }
-            assert!(map.is_empty());
-        })
-    });
-    drop(bench);
-
-    let mut stdmap = std::collections::BTreeMap::new();
-    let mut custommap = bpt::BTreeMap::new();
-
-    for &n in &inputs {
-        stdmap.insert(n, n);
-        custommap.insert(n, n);
-    }
-
-    let mut bench = criterion.benchmark_group("get-small");
-    bench.bench_function("std", |bench| {
-        bench.iter(|| {
-            for &n in &inputs {
-                let n = black_box(n);
-                black_box(stdmap.get(&n));
-                black_box(stdmap.get(&n.wrapping_add(1)));
-            }
-        })
-    });
-    bench.bench_function("custom", |bench| {
-        bench.iter(|| {
-            for &n in &inputs {
-                let n = black_box(n);
-                black_box(custommap.get(&n));
-                black_box(custommap.get(&n.wrapping_add(1)));
-            }
-        })
-    });
-    drop(bench);
-
-    let inputs: Vec<i32> = std::iter::repeat_with(rand::random)
-        .take(1024 * 100)
-        .collect();
-
-    let mut bench = criterion.benchmark_group("insert");
-    bench.bench_function("std", |bench| {
-        bench.iter(|| {
-            let mut map = std::collections::BTreeMap::new();
-            for &n in &inputs {
-                let n = black_box(n);
-                black_box(map.insert(n, n));
-            }
-        })
-    });
-    bench.bench_function("custom", |bench| {
-        bench.iter(|| {
-            let mut map = bpt::BTreeMap::new();
-            for &n in &inputs {
-                let n = black_box(n);
-                black_box(map.insert(n, n));
-            }
-        })
-    });
-    drop(bench);
-
-    let mut bench = criterion.benchmark_group("insert-delete");
-    bench.bench_function("std", |bench| {
-        bench.iter(|| {
-            let mut map = std::collections::BTreeMap::new();
-            for &n in &inputs {
-                let n = black_box(n);
-                black_box(map.insert(n, n));
-            }
-            for &n in &inputs {
-                black_box(map.remove(&n));
-            }
-            assert!(map.is_empty());
-        })
-    });
-    bench.bench_function("custom", |bench| {
-        bench.iter(|| {
-            let mut map = bpt::BTreeMap::new();
-            for &n in &inputs {
-                let n = black_box(n);
-                black_box(map.insert(n, n));
-            }
-            for &n in &inputs {
-                black_box(map.remove(&n));
-            }
-            assert!(map.is_empty());
-        })
-    });
-    drop(bench);
-
-    let mut stdmap = std::collections::BTreeMap::new();
-    let mut custommap = bpt::BTreeMap::new();
-
-    for &n in &inputs {
-        stdmap.insert(n, n);
-        custommap.insert(n, n);
-    }
-
-    let mut bench = criterion.benchmark_group("get");
-    bench.bench_function("std", |bench| {
-        bench.iter(|| {
-            for &n in &inputs {
-                let n = black_box(n);
-                black_box(stdmap.get(&n));
-                black_box(stdmap.get(&n.wrapping_add(1)));
-            }
-        })
-    });
-    bench.bench_function("custom", |bench| {
-        bench.iter(|| {
-            for &n in &inputs {
-                let n = black_box(n);
-                black_box(custommap.get(&n));
-                black_box(custommap.get(&n.wrapping_add(1)));
-            }
-        })
-    });
-    drop(bench);
+    benchmark_input(criterion, "small", &input::SHORT);
+    benchmark_input(criterion, "large", &input::LONG);
 }
 
 criterion_group!(benches, criterion_benchmark);
